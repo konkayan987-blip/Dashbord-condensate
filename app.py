@@ -22,7 +22,12 @@ start_date = st.date_input("Start Date", df['date'].min())
 end_date = st.date_input("End Date", df['date'].max())
 
 filtered = df[(df['date'] >= pd.to_datetime(start_date)) &
-              (df['date'] <= pd.to_datetime(end_date))]
+              (df['date'] <= pd.to_datetime(end_date))].copy()
+
+# 🔥 เช็คก่อนทำอย่างอื่น
+if filtered.empty:
+    st.warning("No data in selected date range")
+    st.stop()
 
 col1, col2 = st.columns(2)
 
