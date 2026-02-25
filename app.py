@@ -24,15 +24,22 @@ end_date = st.date_input("End Date", df['date'].max())
 filtered = df[(df['date'] >= pd.to_datetime(start_date)) &
               (df['date'] <= pd.to_datetime(end_date))].copy()
 
-# 🔥 เช็คก่อนทำอย่างอื่น
+# Check empty
 if filtered.empty:
     st.warning("No data in selected date range")
     st.stop()
 
-col1, col2 = st.columns(2)
-
+# คำนวณ KPI ก่อน
 avg_pct = filtered['pct_condensate'].mean()
 avg_target = filtered['target_pct'].mean()
+
+# KPI Box ด้านบน
+k1, k2, k3 = st.columns(3)
+k1.metric("Average % Condensate", f"{avg_pct*100:.1f}%")
+k2.metric("Target %", f"{avg_target*100:.1f}%")
+k3.metric("Difference", f"{(avg_pct-avg_target)*100:.1f}%")
+
+col1, col2 = st.columns(2)
 
 # 🟢 Gauge
 with col1:
@@ -66,19 +73,16 @@ with col2:
                       "Below Target": "red",
                       "On Target": "green"
                   })
+
     fig.update_layout(yaxis_tickformat=".0%")
+
+    # เส้น Target
+    fig.add_hline(y=avg_target,
+                  line_dash="dash",
+                  line_color="blue",
+                  annotation_text="Target",
+                  annotation_position="top right")
+
     st.plotly_chart(fig, use_container_width=True)
 
-
 st.dataframe(filtered)
-
-k1, k2, k3 = st.columns(3)
-
-k1.metric("Average % Condensate", f"{avg_pct*100:.1f}%")
-k2.metric("Target %", f"{avg_target*100:.1f}%")
-k3.metric("Difference", f"{(avg_pct-avg_target)*100:.1f}%")
-fig.add_hline(y=avg_target,
-              line_dash="dash",
-              line_color="blue",
-              annotation_text="Target",
-              annotation_position="top right")
