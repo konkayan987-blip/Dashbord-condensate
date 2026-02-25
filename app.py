@@ -85,7 +85,7 @@ st.sidebar.write(f"📌 Records Selected: {len(filtered)}")
 
 # Reset Button
 if st.sidebar.button("🔄 Reset Filter"):
-    st.experimental_rerun()
+    st.rerun()
 
 # ถ้าไม่มีข้อมูล
 if filtered.empty:
@@ -167,6 +167,7 @@ with col2:
     st.plotly_chart(fig, use_container_width=True)
 
 st.dataframe(filtered)
+
 
 
 
