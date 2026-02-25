@@ -21,9 +21,12 @@ st.title("📊 Condensate Performance Dashboard")
 start_date = st.date_input("Start Date", df['date'].min())
 end_date = st.date_input("End Date", df['date'].max())
 
-filtered = df[(df['date'] >= pd.to_datetime(start_date)) &
-              (df['date'] <= pd.to_datetime(end_date))].copy()
-
+df['date'] = pd.to_datetime(
+    df['date'],
+    dayfirst=True,
+    errors='coerce'
+)
+df = df.dropna(subset=['date'])
 # Check empty
 if filtered.empty:
     st.warning("No data in selected date range")
@@ -86,3 +89,4 @@ with col2:
     st.plotly_chart(fig, use_container_width=True)
 
 st.dataframe(filtered)
+
