@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 
 st.set_page_config(layout="wide")
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/1G_ikK60FZUgctnM7SLZ4Ss0p6demBrlCwIre27fXsco/export?format=csv&gid=181659687"
     df = pd.read_csv(url)
@@ -184,6 +184,7 @@ st.download_button(
     file_name="condensate_filtered.csv",
     mime="text/csv",
 )
+
 
 
 
