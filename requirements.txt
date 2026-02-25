@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corrugator Performance Dashboard</title>
+    
+    <!-- นำเข้า Tailwind CSS สำหรับจัดการความสวยงาม -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- นำเข้า React และ ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- เพิ่ม PropTypes และ React-is ที่จำเป็นสำหรับ Recharts -->
+    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    <script src="https://unpkg.com/react-is@18.2.0/umd/react-is.production.min.js"></script>
+    
+    <!-- นำเข้า Recharts สำหรับวาดกราฟ (ล็อกเวอร์ชัน 2.1.12 ให้เสถียรกับ HTML ไฟล์เดียว) -->
+    <script src="https://unpkg.com/recharts@2.1.12/umd/Recharts.js" crossorigin></script>
+    
+    <!-- นำเข้า Babel สำหรับแปลงโค้ด JSX ให้ทำงานบนเบราว์เซอร์ได้ทันที -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <!-- จุดที่ React จะนำ Dashboard มาแสดงผล -->
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // ดึงเครื่องมือที่จำเป็นออกมาจาก React และ Recharts
+        const { useState, useMemo, useCallback } = React;
+        const { 
+          BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+          PieChart, Pie, Cell, LineChart, Line 
+        } = window.Recharts;
+
+        // --- สร้าง SVG Icons แบบ Inline เพื่อให้ไม่ต้องพึ่งพาไฟล์ภายนอก ---
+        const IconUploadCloud = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>;
+        const IconActivity = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>;
+        const IconAlertTriangle = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>;
+        const IconCheckCircle = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>;
+        const IconClock = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>;
+        const IconFilter = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>;
+        const IconFileText = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>;
+        const IconBarChart2 = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>;
+
+        // --- Helper Functions ---
+        const parseCSV = (str) => {
+          const arr = [];
+          let quote = false;
+          let row = 0;
+          let col = 0;
+          for (let c = 0; c < str.length; c++) {
+              let cc = str[c], nc = str[c+1];
+              arr[row] = arr[row] || [];
+              arr[row][col] = arr[row][col] || '';
+              if (cc === '"' && quote && nc === '"') { arr[row][col] += cc; ++c; continue; }
+              if (cc === '"') { quote = !quote; continue; }
+              if (cc === ',' && !quote) { ++col; continue; }
+              if (cc === '\r' && nc === '\n' && !quote) { ++row; col = 0; ++c; continue; }
+              if (cc === '\n' && !quote) { ++row; col = 0; continue; }
+              if (cc === '\r' && !quote) { ++row; col = 0; continue; }
+              arr[row][col] += cc;
+          }
+          return arr.filter(r => r.length > 1 || (r.length === 1 && r[0] !== ''));
+        };
+
+        const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+
+        // --- Main App Component ---
+        function App() {
+          const [data, setData] = useState([]);
+          const [headers, setHeaders] = useState([]);
+          const [fileName, setFileName] = useState('');
+          
+          const [filters, setFilters] = useState({
+            machine: 'All',
+            shift: 'All',
+            flute: 'All'
+          });
+
+          const handleFileUpload = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            setFileName(file.name);
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+              const text = evt.target.result;
+              const rows = parseCSV(text);
+              if (rows.length > 0) {
+                const h = rows[0].map(header => header.trim());
+                const parsedData = rows.slice(1).map(row => {
+                  let obj = {};
+                  h.forEach((header, i) => {
+                    obj[header] = row[i]?.trim() || '';
+                  });
+                  return obj;
+                }).filter(d => d['PDR']); 
+                
+                setHeaders(h);
+                setData(parsedData);
+              }
+            };
+            reader.readAsText(file); // ใช้ Default Encoding
+          };
+
+          const cleanData = useMemo(() => {
+            return data.map(d => {
+              const parseNum = (val) => {
+                if (!val) return 0;
+                return parseFloat(val.replace(/,/g, '').replace(/%/g, '')) || 0;
+              };
+              return {
+                ...d,
+                actualSpeedNum: parseNum(d['Actual Speed']),
+                planSpeedNum: parseNum(d['Speed Plan']),
+                wasteNum: parseNum(d['Waste']),
+                goodWeightNum: parseNum(d['น้ำหนักของดี']),
+                machine: d['เครื่องจักร'] || 'Unknown',
+                shift: d['กะ'] || 'Unknown',
+                flute: d['Flute'] || 'Unknown',
+                speedStatus: d['Speed เทียบแผน'] || 'N/A'
+              };
+            });
+          }, [data]);
+
+          const filteredData = useMemo(() => {
+            return cleanData.filter(d => {
+              const matchMachine = filters.machine === 'All' || d.machine === filters.machine;
+              const matchShift = filters.shift === 'All' || d.shift === filters.shift;
+              const matchFlute = filters.flute === 'All' || d.flute === filters.flute;
+              return matchMachine && matchShift && matchFlute;
+            });
+          }, [cleanData, filters]);
+
+          const filterOptions = useMemo(() => {
+            const machines = [...new Set(cleanData.map(d => d.machine))].filter(Boolean);
+            const shifts = [...new Set(cleanData.map(d => d.shift))].filter(Boolean);
+            const flutes = [...new Set(cleanData.map(d => d.flute))].filter(Boolean);
+            return { machines, shifts, flutes };
+          }, [cleanData]);
+
+          const kpis = useMemo(() => {
+            if (filteredData.length === 0) return { totalOrders: 0, avgSpeed: 0, avgWaste: 0, totalWeight: 0 };
+            
+            const totalOrders = filteredData.length;
+            const avgSpeed = filteredData.reduce((acc, curr) => acc + curr.actualSpeedNum, 0) / totalOrders;
+            const avgWaste = filteredData.reduce((acc, curr) => acc + curr.wasteNum, 0) / totalOrders;
+            const totalWeight = filteredData.reduce((acc, curr) => acc + curr.goodWeightNum, 0);
+
+            return {
+              totalOrders,
+              avgSpeed: avgSpeed.toFixed(2),
+              avgWaste: avgWaste.toFixed(2),
+              totalWeight: totalWeight.toLocaleString(undefined, { maximumFractionDigits: 2 })
+            };
+          }, [filteredData]);
+
+          const speedStatusData = useMemo(() => {
+            const counts = filteredData.reduce((acc, curr) => {
+              acc[curr.speedStatus] = (acc[curr.speedStatus] || 0) + 1;
+              return acc;
+            }, {});
+            return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+          }, [filteredData]);
+
+          const speedByFluteData = useMemo(() => {
+            const grouped = filteredData.reduce((acc, curr) => {
+              if (!acc[curr.flute]) acc[curr.flute] = { count: 0, actual: 0, plan: 0 };
+              acc[curr.flute].count += 1;
+              acc[curr.flute].actual += curr.actualSpeedNum;
+              acc[curr.flute].plan += curr.planSpeedNum;
+              return acc;
+            }, {});
+            return Object.keys(grouped).map(key => ({
+              name: key,
+              'Actual Speed': +(grouped[key].actual / grouped[key].count).toFixed(2),
+              'Plan Speed': +(grouped[key].plan / grouped[key].count).toFixed(2),
+            }));
+          }, [filteredData]);
+
+          const wasteByMachineData = useMemo(() => {
+            const grouped = filteredData.reduce((acc, curr) => {
+              if (!acc[curr.machine]) acc[curr.machine] = { count: 0, waste: 0 };
+              acc[curr.machine].count += 1;
+              acc[curr.machine].waste += curr.wasteNum;
+              return acc;
+            }, {});
+            return Object.keys(grouped).map(key => ({
+              name: key,
+              'Waste %': +(grouped[key].waste / grouped[key].count).toFixed(2),
+            }));
+          }, [filteredData]);
+
+          const speedTrendData = useMemo(() => {
+            return filteredData.slice(0, 50).map((d, index) => ({
+              name: `Order ${index + 1}`,
+              'Actual Speed': d.actualSpeedNum,
+              'Plan Speed': d.planSpeedNum,
+              date: d['วันที่']
+            }));
+          }, [filteredData]);
+
+          if (data.length === 0) {
+            return (
+              <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 font-sans">
+                <div className="bg-white p-10 rounded-2xl shadow-xl max-w-lg w-full text-center border border-gray-100">
+                  <div className="bg-blue-100 p-4 rounded-full w-20 h-20 mx-auto flex items-center justify-center mb-6">
+                    <IconUploadCloud className="text-blue-600 w-10 h-10" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-gray-800 mb-2">อัปโหลดไฟล์ข้อมูลการผลิต</h1>
+                  <p className="text-gray-500 mb-8 text-sm">กรุณาอัปโหลดไฟล์ CSV เพื่อดู Dashboard</p>
+                  
+                  <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm inline-flex items-center gap-2">
+                    <IconFileText className="w-5 h-5" />
+                    เลือกไฟล์ CSV
+                    <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                  </label>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                <div>
+                  <h1 className="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-2">
+                    <IconActivity className="text-blue-600 w-8 h-8" />
+                    Corrugator Performance Dashboard
+                  </h1>
+                  <p className="text-slate-500 text-sm mt-1">ไฟล์ข้อมูล: {fileName} | แสดงข้อมูล {filteredData.length} รายการ</p>
+                </div>
+                
+                <label className="cursor-pointer bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg font-medium transition-colors shadow-sm text-sm inline-flex items-center gap-2">
+                  <IconUploadCloud className="w-4 h-4" />
+                  เปลี่ยนไฟล์ข้อมูล
+                  <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                </label>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-wrap gap-4 items-center">
+                <div className="flex items-center gap-2 text-slate-600 font-medium mr-2">
+                  <IconFilter className="w-5 h-5" /> ตัวกรอง:
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-500">เครื่องจักร (Machine)</label>
+                  <select 
+                    className="border border-slate-300 rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    value={filters.machine}
+                    onChange={(e) => setFilters({...filters, machine: e.target.value})}
+                  >
+                    <option value="All">ทั้งหมด</option>
+                    {filterOptions.machines.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-500">กะการทำงาน (Shift)</label>
+                  <select 
+                    className="border border-slate-300 rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    value={filters.shift}
+                    onChange={(e) => setFilters({...filters, shift: e.target.value})}
+                  >
+                    <option value="All">ทั้งหมด</option>
+                    {filterOptions.shifts.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-500">เกรดลอน (Flute)</label>
+                  <select 
+                    className="border border-slate-300 rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    value={filters.flute}
+                    onChange={(e) => setFilters({...filters, flute: e.target.value})}
+                  >
+                    <option value="All">ทั้งหมด</option>
+                    {filterOptions.flutes.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="bg-blue-100 p-3 rounded-lg text-blue-600">
+                    <IconFileText className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500 font-medium">จำนวนออเดอร์ (Orders)</p>
+                    <p className="text-2xl font-bold text-slate-800">{kpis.totalOrders}</p>
+                  </div>
+                </div>
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="bg-green-100 p-3 rounded-lg text-green-600">
+                    <IconActivity className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500 font-medium">ความเร็วเฉลี่ย (Avg Speed)</p>
+                    <p className="text-2xl font-bold text-slate-800">{kpis.avgSpeed} <span className="text-sm font-normal text-slate-500">m/min</span></p>
+                  </div>
+                </div>
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="bg-orange-100 p-3 rounded-lg text-orange-600">
+                    <IconAlertTriangle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500 font-medium">% Waste เฉลี่ย</p>
+                    <p className="text-2xl font-bold text-slate-800">{kpis.avgWaste}%</p>
+                  </div>
+                </div>
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                  <div className="bg-purple-100 p-3 rounded-lg text-purple-600">
+                    <IconCheckCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500 font-medium">น้ำหนักของดีรวม (kg)</p>
+                    <p className="text-2xl font-bold text-slate-800">{kpis.totalWeight}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <IconClock className="w-5 h-5 text-slate-500" />
+                    สถานะความเร็วเทียบแผน (Speed Status)
+                  </h3>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={speedStatusData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={90}
+                          fill="#8884d8"
+                          paddingAngle={5}
+                          dataKey="value"
+                          label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          {speedStatusData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => [`${value} ออเดอร์`, 'จำนวน']} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <IconBarChart2 className="w-5 h-5 text-slate-500" />
+                    เปรียบเทียบความเร็วเฉลี่ยตาม Flute
+                  </h3>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={speedByFluteData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="name" tick={{fill: '#64748b'}} axisLine={{stroke: '#cbd5e1'}} />
+                        <YAxis tick={{fill: '#64748b'}} axisLine={{stroke: '#cbd5e1'}} />
+                        <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                        <Legend />
+                        <Bar dataKey="Actual Speed" fill="#0088FE" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Plan Speed" fill="#00C49F" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <IconAlertTriangle className="w-5 h-5 text-slate-500" />
+                    อัตรา Waste เฉลี่ยแบ่งตามเครื่องจักร
+                  </h3>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={wasteByMachineData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="name" tick={{fill: '#64748b'}} axisLine={{stroke: '#cbd5e1'}} />
+                        <YAxis tick={{fill: '#64748b'}} axisLine={{stroke: '#cbd5e1'}} />
+                        <Tooltip formatter={(value) => [`${value}%`, 'Waste']} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                        <Legend />
+                        <Bar dataKey="Waste %" fill="#FF8042" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <IconActivity className="w-5 h-5 text-slate-500" />
+                    แนวโน้มความเร็ว 50 ออเดอร์ล่าสุด
+                  </h3>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={speedTrendData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="name" tick={false} axisLine={{stroke: '#cbd5e1'}} />
+                        <YAxis tick={{fill: '#64748b'}} axisLine={{stroke: '#cbd5e1'}} />
+                        <Tooltip 
+                          labelFormatter={(label, payload) => payload?.[0]?.payload?.date || label}
+                          contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} 
+                        />
+                        <Legend />
+                        <Line type="monotone" dataKey="Actual Speed" stroke="#0088FE" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="Plan Speed" stroke="#00C49F" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-200 flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-800">รายละเอียดข้อมูล (ตาราง)</h3>
+                  <span className="text-sm text-slate-500">แสดง 100 รายการแรก</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left text-slate-600">
+                    <thead className="text-xs text-slate-700 uppercase bg-slate-50">
+                      <tr>
+                        <th className="px-6 py-3">PDR</th>
+                        <th className="px-6 py-3">เครื่องจักร</th>
+                        <th className="px-6 py-3">วันที่</th>
+                        <th className="px-6 py-3">กะ</th>
+                        <th className="px-6 py-3">Flute</th>
+                        <th className="px-6 py-3">Speed Plan</th>
+                        <th className="px-6 py-3">Actual Speed</th>
+                        <th className="px-6 py-3">Status</th>
+                        <th className="px-6 py-3">Waste</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredData.slice(0, 100).map((row, idx) => (
+                        <tr key={idx} className="bg-white border-b hover:bg-slate-50">
+                          <td className="px-6 py-4 font-medium text-slate-900">{row['PDR']}</td>
+                          <td className="px-6 py-4">{row['เครื่องจักร']}</td>
+                          <td className="px-6 py-4">{row['วันที่']}</td>
+                          <td className="px-6 py-4">{row['กะ']}</td>
+                          <td className="px-6 py-4">{row['Flute']}</td>
+                          <td className="px-6 py-4">{row['Speed Plan']}</td>
+                          <td className="px-6 py-4 font-medium text-blue-600">{row['Actual Speed']}</td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              row.speedStatus === 'เร็วกว่าแผน' ? 'bg-green-100 text-green-700' : 
+                              row.speedStatus === 'ช้ากว่าแผน' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {row.speedStatus}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">{row['Waste']}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {filteredData.length === 0 && (
+                    <div className="p-8 text-center text-slate-500">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // --- Render the App ---
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
