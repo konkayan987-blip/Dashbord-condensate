@@ -5,9 +5,9 @@ import plotly.graph_objects as go
 
 st.set_page_config(layout="wide")
 
-@st.cache_data(ttl=3600)  # รีเฟรชข้อมูลทุก 1 ชั่วโมง
+@st.cache_data(ttl=3600)
 def load_data():
-    url = "ใส่ลิงก์ export csv ของพี่"
+    url = "https://docs.google.com/spreadsheets/d/1AbcXXXXXXX/export?format=csv"
     df = pd.read_csv(url)
     df.columns = df.columns.str.strip()
     df['date'] = pd.to_datetime(df['date'], dayfirst=True)
@@ -63,5 +63,6 @@ with col2:
                   })
     fig.update_layout(yaxis_tickformat=".0%")
     st.plotly_chart(fig, use_container_width=True)
+
 
 st.dataframe(filtered)
