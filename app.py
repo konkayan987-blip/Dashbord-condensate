@@ -84,7 +84,13 @@ st.sidebar.markdown("---")
 st.sidebar.write(f"📌 Records Selected: {len(filtered)}")
 
 # Reset Button
+# Reset Button
 if st.sidebar.button("🔄 Reset Filter"):
+    st.rerun()
+
+# ✅ วาง Refresh ตรงนี้
+if st.sidebar.button("🔁 Refresh Data"):
+    st.cache_data.clear()
     st.rerun()
 
 # ถ้าไม่มีข้อมูล
@@ -178,6 +184,7 @@ st.download_button(
     file_name="condensate_filtered.csv",
     mime="text/csv",
 )
+
 
 
 
