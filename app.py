@@ -167,6 +167,17 @@ with col2:
     st.plotly_chart(fig, use_container_width=True)
 
 st.dataframe(filtered)
+# =========================
+# 📥 Download Button
+# =========================
+csv = filtered.to_csv(index=False).encode('utf-8')
+
+st.download_button(
+    label="📥 Download Filtered Data",
+    data=csv,
+    file_name="condensate_filtered.csv",
+    mime="text/csv",
+)
 
 
 
