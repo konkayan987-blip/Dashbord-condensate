@@ -7,7 +7,7 @@ st.set_page_config(layout="wide")
 
 @st.cache_data(ttl=3600)
 def load_data():
-    url = "https://docs.google.com/spreadsheets/d/1G_ikK60FZUgctnM7SLZ4Ss0p6demBrlCwIre27fXsco/export?format=csv"
+    url = "https://docs.google.com/spreadsheets/d/1G_ikK60FZUgctnM7SLZ4Ss0p6demBrlCwIre27fXsco/export?format=csv&gid=181659687"
     df = pd.read_csv(url)
     df.columns = df.columns.str.strip()
     df['date'] = pd.to_datetime(df['date'], dayfirst=True)
@@ -66,4 +66,5 @@ with col2:
 
 
 st.dataframe(filtered)
+
 
