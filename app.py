@@ -10,7 +10,16 @@ def load_data():
     url = "https://docs.google.com/spreadsheets/d/1G_ikK60FZUgctnM7SLZ4Ss0p6demBrlCwIre27fXsco/export?format=csv&gid=181659687"
     df = pd.read_csv(url)
     df.columns = df.columns.str.strip()
-    df['date'] = pd.to_datetime(df['date'], dayfirst=True)
+
+    # 🔥 แก้ปัญหา format วันที่หลากหลาย
+    df['date'] = pd.to_datetime(
+        df['date'],
+        format='mixed',
+        errors='coerce'
+    )
+
+    df = df.dropna(subset=['date'])
+
     return df
 
 df = load_data()
@@ -89,4 +98,5 @@ with col2:
     st.plotly_chart(fig, use_container_width=True)
 
 st.dataframe(filtered)
+
 
