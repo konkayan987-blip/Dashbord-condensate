@@ -72,4 +72,13 @@ with col2:
 
 st.dataframe(filtered)
 
+k1, k2, k3 = st.columns(3)
 
+k1.metric("Average % Condensate", f"{avg_pct*100:.1f}%")
+k2.metric("Target %", f"{avg_target*100:.1f}%")
+k3.metric("Difference", f"{(avg_pct-avg_target)*100:.1f}%")
+fig.add_hline(y=avg_target,
+              line_dash="dash",
+              line_color="blue",
+              annotation_text="Target",
+              annotation_position="top right")
