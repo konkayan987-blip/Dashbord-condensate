@@ -5,21 +5,51 @@ import plotly.graph_objects as go
 
 st.set_page_config(layout="wide")
 
+# ✅ เพิ่ม Dictionary สำหรับแปลงเดือนภาษาไทย
+THAI_MONTHS = {
+    "ม.ค.": "01", "ก.พ.": "02", "มี.ค.": "03", "เม.ย.": "04",
+    "พ.ค.": "05", "มิ.ย.": "06", "ก.ค.": "07", "ส.ค.": "08",
+    "ก.ย.": "09", "ต.ค.": "10", "พ.ย.": "11", "ธ.ค.": "12"
+}
+
+def parse_thai_date(date_str):
+    if pd.isna(date_str):
+        return date_str
+    
+    date_str = str(date_str).strip()
+    
+    # วนลูปหาเดือนภาษาไทยในข้อความ
+    for th_month, num_month in THAI_MONTHS.items():
+        if th_month in date_str:
+            # แทนที่เดือนภาษาไทยด้วยตัวเลข
+            parts = date_str.replace(th_month, num_month).split()
+            if len(parts) == 3:
+                day = parts[0].zfill(2) # เติม 0 ข้างหน้าถ้ามีเลขตัวเดียว
+                month = parts[1]
+                year = parts[2]
+                return f"{year}-{month}-{day}"
+    
+    # ถ้าไม่ใช่ภาษาไทย ก็ส่งค่าเดิมกลับไปให้ pandas จัดการต่อ
+    return date_str
+
 @st.cache_data(ttl=300)
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/1G_ikK60FZUgctnM7SLZ4Ss0p6demBrlCwIre27fXsco/export?format=csv&gid=181659687"
     df = pd.read_csv(url)
     df.columns = df.columns.str.strip()
 
-    # 🔥 แก้ปัญหา format วันที่หลากหลาย
+    # 🔥 แปลงวันที่ภาษาไทยก่อน
+    df['date'] = df['date'].apply(parse_thai_date)
+
+    # 🔥 จากนั้นค่อยให้ pandas แปลงเป็น datetime แบบมาตรฐาน
     df['date'] = pd.to_datetime(
         df['date'],
-        format='mixed',
         errors='coerce'
     )
+    # ลบแถวที่วันที่เป็น NaT (แปลงไม่ได้) ทิ้ง
     df = df.dropna(subset=['date'])
 
-    # ✅ สร้าง Status ตั้งแต่ตอนโหลดข้อมูลเลย เพื่อป้องกัน SettingWithCopyWarning
+    # สร้าง Status ตั้งแต่ตอนโหลดข้อมูล
     if 'pct_condensate' in df.columns and 'target_pct' in df.columns:
         df['status'] = df.apply(
             lambda x: "Below Target" if x['pct_condensate'] < x['target_pct'] else "On Target",
@@ -30,6 +60,11 @@ def load_data():
 # โหลดข้อมูล
 df = load_data()
 
+# ✅ แก้ปัญหา NaTType: ตรวจสอบก่อนว่าหลังจากโหลดมาแล้ว ข้อมูลว่างเปล่าหรือไม่
+if df.empty:
+    st.error("🚨 ไม่พบข้อมูล หรือ รูปแบบวันที่ใน Google Sheet ไม่ถูกต้อง ทำให้ไม่สามารถดึงข้อมูลมาแสดงผลได้ โปรดตรวจสอบ Google Sheet")
+    st.stop() # หยุดการทำงานของแอปทันทีเพื่อไม่ให้เกิด Error ด้านล่าง
+
 st.title("📊 Condensate Performance Dashboard")
 
 # ==========================================
@@ -37,13 +72,14 @@ st.title("📊 Condensate Performance Dashboard")
 # ==========================================
 st.sidebar.header("🔎 Filter Panel")
 
-# 1. Date Range Filter (แก้ปัญหา Error ตอนกดเลือกวัน)
-min_date = df['date'].min()
-max_date = df['date'].max()
+# 1. Date Range Filter
+# ✅ แปลง Pandas Timestamp เป็น Python datetime.date ทันที เพื่อป้องกัน Error จาก Streamlit
+min_date = df['date'].min().date()
+max_date = df['date'].max().date()
 
 date_selection = st.sidebar.date_input(
     "Select Date Range",
-    value=(min_date, max_date), # ใช้ tuple สำหรับค่า default
+    value=(min_date, max_date), 
     min_value=min_date,
     max_value=max_date
 )
@@ -78,14 +114,14 @@ else:
     selected_status = None
 
 # ==========================================
-# 🔄 APPLY FILTERS (รวบยอดทำทีเดียว)
+# 🔄 APPLY FILTERS
 # ==========================================
 filtered = df.copy()
 
 # กรองวันที่
 filtered = filtered[
-    (filtered['date'] >= pd.to_datetime(start_date)) &
-    (filtered['date'] <= pd.to_datetime(end_date))
+    (filtered['date'].dt.date >= start_date) & 
+    (filtered['date'].dt.date <= end_date)
 ]
 
 # กรอง Boiler
@@ -152,7 +188,7 @@ with col2:
                       "Below Target": "red",
                       "On Target": "green"
                   },
-                  markers=True) # เพิ่ม marker จุดบนเส้นให้อ่านง่ายขึ้น
+                  markers=True)
 
     fig.update_layout(yaxis_tickformat=".0%")
 
