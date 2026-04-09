@@ -17,38 +17,45 @@ def load_data():
         format='mixed',
         errors='coerce'
     )
-
     df = df.dropna(subset=['date'])
 
+    # ✅ สร้าง Status ตั้งแต่ตอนโหลดข้อมูลเลย เพื่อป้องกัน SettingWithCopyWarning
+    if 'pct_condensate' in df.columns and 'target_pct' in df.columns:
+        df['status'] = df.apply(
+            lambda x: "Below Target" if x['pct_condensate'] < x['target_pct'] else "On Target",
+            axis=1
+        )
     return df
 
+# โหลดข้อมูล
 df = load_data()
 
 st.title("📊 Condensate Performance Dashboard")
+
 # ==========================================
 # 🎛️ PROFESSIONAL SIDEBAR FILTER
 # ==========================================
 st.sidebar.header("🔎 Filter Panel")
 
-# Date Range
+# 1. Date Range Filter (แก้ปัญหา Error ตอนกดเลือกวัน)
 min_date = df['date'].min()
 max_date = df['date'].max()
 
-date_range = st.sidebar.date_input(
+date_selection = st.sidebar.date_input(
     "Select Date Range",
-    [min_date, max_date],
+    value=(min_date, max_date), # ใช้ tuple สำหรับค่า default
     min_value=min_date,
     max_value=max_date
 )
 
-if len(date_range) == 2:
-    start_date, end_date = date_range
+# ตรวจสอบว่าเลือกวันที่ครบ 2 วันหรือยัง (Start & End)
+if len(date_selection) != 2:
+    st.warning("⚠️ Please select both Start Date and End Date.")
+    st.stop()
 else:
-    start_date = date_range[0]
-    end_date = date_range[0]
+    start_date, end_date = date_selection
 
-
-# Boiler Filter (ถ้ามีคอลัมน์ boiler)
+# 2. Boiler Filter
 if 'boiler' in df.columns:
     boiler_list = df['boiler'].unique().tolist()
     selected_boiler = st.sidebar.multiselect(
@@ -59,52 +66,54 @@ if 'boiler' in df.columns:
 else:
     selected_boiler = None
 
-# ==========================================
-# APPLY FILTER
-# ==========================================
-filtered = df[
-    (df['date'] >= pd.to_datetime(start_date)) &
-    (df['date'] <= pd.to_datetime(end_date))
-].copy()
+# 3. Status Filter
+if 'status' in df.columns:
+    status_list = df['status'].unique().tolist()
+    selected_status = st.sidebar.multiselect(
+        "Select Status",
+        status_list,
+        default=status_list
+    )
+else:
+    selected_status = None
 
-if selected_boiler:
+# ==========================================
+# 🔄 APPLY FILTERS (รวบยอดทำทีเดียว)
+# ==========================================
+filtered = df.copy()
+
+# กรองวันที่
+filtered = filtered[
+    (filtered['date'] >= pd.to_datetime(start_date)) &
+    (filtered['date'] <= pd.to_datetime(end_date))
+]
+
+# กรอง Boiler
+if selected_boiler is not None:
     filtered = filtered[filtered['boiler'].isin(selected_boiler)]
 
-# สร้าง status
-filtered['status'] = filtered.apply(
-    lambda x: "Below Target" if x['pct_condensate'] < x['target_pct'] else "On Target",
-    axis=1
-)
-
-# Status Filter
-status_list = filtered['status'].unique().tolist()
-selected_status = st.sidebar.multiselect(
-    "Select Status",
-    status_list,
-    default=status_list
-)
-
-filtered = filtered[filtered['status'].isin(selected_status)]
+# กรอง Status
+if selected_status is not None:
+    filtered = filtered[filtered['status'].isin(selected_status)]
 
 # แสดงจำนวนข้อมูล
 st.sidebar.markdown("---")
 st.sidebar.write(f"📌 Records Selected: {len(filtered)}")
 
-# Reset Button
-if st.sidebar.button("🔄 Reset Filter"):
-    st.rerun()
-
-# ✅ วาง Refresh ตรงนี้
+# ปุ่ม Refresh Data
 if st.sidebar.button("🔁 Refresh Data"):
     st.cache_data.clear()
     st.rerun()
 
-# ถ้าไม่มีข้อมูล
+# ตรวจสอบว่ามีข้อมูลหลังการกรองหรือไม่
 if filtered.empty:
-    st.warning("No data matching selected filters")
+    st.warning("⚠️ No data matching selected filters.")
     st.stop()
 
-# คำนวณ KPI ก่อน
+# ==========================================
+# 📈 KPIs & CHARTS
+# ==========================================
+# คำนวณ KPI
 avg_pct = filtered['pct_condensate'].mean()
 avg_target = filtered['target_pct'].mean()
 
@@ -116,7 +125,7 @@ k3.metric("Difference", f"{(avg_pct-avg_target)*100:.1f}%")
 
 col1, col2 = st.columns(2)
 
-# 🟢 Gauge
+# 🟢 Gauge Chart
 with col1:
     fig_gauge = go.Figure(go.Indicator(
         mode="gauge+number",
@@ -142,28 +151,30 @@ with col2:
                   color_discrete_map={
                       "Below Target": "red",
                       "On Target": "green"
-                  })
+                  },
+                  markers=True) # เพิ่ม marker จุดบนเส้นให้อ่านง่ายขึ้น
 
     fig.update_layout(yaxis_tickformat=".0%")
 
     # เส้น Target
-    if pd.notna(avg_target):
-        fig.add_hline(y=avg_target,
-                      line_dash="dash",
-                      line_color="blue",
-                      annotation_text="Target",
-                      annotation_position="top right")
+    fig.add_hline(y=avg_target,
+                  line_dash="dash",
+                  line_color="blue",
+                  annotation_text="Average Target",
+                  annotation_position="top right")
 
     st.plotly_chart(fig, use_container_width=True)
 
-st.dataframe(filtered)
-# =========================
-# 📥 Download Button
-# =========================
-csv = filtered.to_csv(index=False).encode('utf-8')
+# ==========================================
+# 📊 DATAFRAME & DOWNLOAD
+# ==========================================
+st.markdown("### 📋 Filtered Data")
+st.dataframe(filtered, use_container_width=True)
 
+# Download Button
+csv = filtered.to_csv(index=False).encode('utf-8')
 st.download_button(
-    label="📥 Download Filtered Data",
+    label="📥 Download Filtered Data (CSV)",
     data=csv,
     file_name="condensate_filtered.csv",
     mime="text/csv",
